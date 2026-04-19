@@ -243,5 +243,17 @@ button:hover {
 }
 
 /* Colores de advertencia */
-.hp-low { background-color: #e74c3c !important; } /* Rojo */
+/* Colores de advertencia fijos */
 .hp-mid { background-color: #f1c40f !important; } /* Amarillo */
+.hp-low { background-color: #e74c3c !important; } /* Rojo */
+
+/* Animación para estado crítico (parpadeo rojo y rosa) */
+@keyframes flash-critical {
+    0% { background-color: #e74c3c; } /* Rojo intenso */
+    50% { background-color: #e4a4b4; } /* Rosa neón */
+    100% { background-color: #e74c3c; } /* Vuelve a rojo */
+}
+
+.hp-critical {
+    animation: flash-critical 0.3s infinite !important;
+}

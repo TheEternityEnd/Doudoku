@@ -116,8 +116,8 @@ function renderBoard(board) {
                             e.target.classList.add('readonly');
                             
                         } else {
-                            // ERROR: Restar 15 de vida (lo que ya tenías)
-                            saludPropia = Math.max(0, saludPropia - 15);
+                            // ERROR: Restar 10 de vida (lo que ya tenías)
+                            saludPropia = Math.max(0, saludPropia - 10);
                             actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
                             socket.emit('actualizarSalud', saludPropia);
                             
@@ -173,19 +173,25 @@ function volverAlLobby() {
 
 function actualizarUIBarraVida(idBarra, idTexto, salud) {
     const barra = document.getElementById(idBarra);
-    const porcentaje = (salud / 150) * 100;
+    
+    // Calculamos el porcentaje para el ancho de la barra (evitando que sea menor a 0)
+    const porcentaje = Math.max(0, (salud / 150) * 100);
     barra.style.width = porcentaje + "%";
     
     if (idTexto) document.getElementById(idTexto).innerText = salud;
 
-    // Cambiar colores
-    if (porcentaje <= 30) {
-        barra.classList.add('hp-low');
-    } else if (porcentaje <= 60) {
-        barra.classList.add('hp-mid');
-    } else {
-        barra.classList.remove('hp-low', 'hp-mid');
+    // 1. Limpiamos cualquier color o animación anterior
+    barra.classList.remove('hp-mid', 'hp-low', 'hp-critical');
+
+    // 2. Aplicamos la clase correcta según la cantidad de vida restante
+    if (salud <= 25) {
+        barra.classList.add('hp-critical'); // Por debajo de 25: Parpadea en rojo y rosa
+    } else if (salud <= 50) {
+        barra.classList.add('hp-low');      // 50 o menos: Rojo sólido
+    } else if (salud <= 100) {
+        barra.classList.add('hp-mid');      // 100 o menos: Amarillo sólido
     }
+    // Si la salud es mayor a 100, se queda con su color verde por defecto
 }
 
 // --- LÓGICA DE SOCKET.IO Y MATCHMAKING ---
@@ -216,6 +222,17 @@ socket.on('partidaEncontrada', (datos) => {
     p1Name.innerText = datos.jugador1; // Tu nombre siempre a la izquierda
     p2Name.innerText = datos.jugador2; // Nombre del rival a la derecha
     
+    // --- CORRECCIÓN AQUÍ ---
+    // Guardamos la solución enviada por el servidor para poder validar los ataques
+    solucionActual = datos.solucionPropia;
+
+    // Reiniciamos la salud a 150 para asegurar un inicio limpio
+    saludPropia = 150;
+    saludRival = 150;
+    actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
+    actualizarUIBarraVida('opponent-hp-bar', null, saludRival);
+    // -----------------------
+
     // Dibujamos ambos tableros
     renderBoard(datos.tableroPropio);
     renderOpponentBoard(datos.tableroRival);
