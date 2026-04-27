@@ -15,7 +15,17 @@
             <button id="save-user-btn">Guardar Nombre</button>
         </div>
         <h2 id="welcome-msg" style="display:none;">Hola, <span id="display-name"></span></h2>
-        <button id="find-match-btn" style="display:none;">Buscar Partida</button>
+        
+        <div id="lobby-buttons" style="display:none;">
+            <button id="find-match-btn">Buscar Partida 1v1</button>
+            <div class="bot-section">
+                <h3>Juego Individual (IA)</h3>
+                <button class="bot-btn" data-dif="facil">Fácil</button>
+                <button class="bot-btn" data-dif="medio">Medio</button>
+                <button class="bot-btn" data-dif="dificil">Difícil</button>
+            </div>
+        </div>
+
         <p id="status-msg"></p>
     </div>
 
@@ -30,6 +40,11 @@
                     <div id="player-hp-bar" class="hp-fill"></div>
                     <div class="hp-text"><span id="player-hp-val">150</span> / 150 HP</div>
                 </div>
+                <div id="player-combo" class="combo-text" style="display: none;">Combo x0!</div>
+
+                <div class="tools-container">
+                    <button id="toggle-notes-btn" class="tool-btn">✏️ Notas: OFF</button>
+                </div>
 
                 <div id="sudoku-board"></div>
                 <button id="leave-match-btn">Abandonar Partida</button>
@@ -43,6 +58,17 @@
                 </div>
 
                 <div id="opponent-board"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-over-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2 id="game-over-title"></h2>
+            <p id="game-over-message"></p>
+            <div class="modal-buttons">
+                <button id="rematch-btn">Revancha</button>
+                <button id="lobby-btn">Volver al Lobby</button>
             </div>
         </div>
     </div>

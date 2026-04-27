@@ -23,6 +23,10 @@ let inputsOponente = [];
 let saludPropia = 150;
 let saludRival = 150;
 let solucionActual = [];
+let comboCount = 0; // Para el sistema de combos
+
+let notesMode = false;
+let notesData = {}; // Guarda qué notas de lápiz hay en cada celda
 
 // --- SISTEMA DE COOKIES ---
 function setCookie(nombre, valor, dias) {
@@ -64,41 +68,112 @@ function mostrarLobbyPreparado() {
     document.getElementById('username-section').style.display = 'none';
     welcomeMsg.style.display = 'block';
     displayName.innerText = miNombre;
-    findMatchBtn.style.display = 'inline-block';
+    document.getElementById('lobby-buttons').style.display = 'block';
+}
+
+// Evento de Modo Notas
+const toggleNotesBtn = document.getElementById('toggle-notes-btn');
+if (toggleNotesBtn) {
+    toggleNotesBtn.addEventListener('click', () => {
+        notesMode = !notesMode;
+        toggleNotesBtn.classList.toggle('active', notesMode);
+        toggleNotesBtn.innerText = notesMode ? "✏️ Notas: ON" : "✏️ Notas: OFF";
+    });
+}
+
+function renderNotes(r, c) {
+    const overlay = document.getElementById(`notes-${r}-${c}`);
+    if (!overlay) return;
+    overlay.innerHTML = '';
+    
+    for (let i = 1; i <= 9; i++) {
+        let div = document.createElement('div');
+        div.className = 'note-item';
+        if (notesData[`${r},${c}`].has(i)) {
+            div.innerText = i;
+        }
+        overlay.appendChild(div);
+    }
+}
+
+function toggleNote(r, c, val) {
+    const key = `${r},${c}`;
+    if (!notesData[key]) notesData[key] = new Set();
+    
+    if (notesData[key].has(val)) {
+        notesData[key].delete(val);
+    } else {
+        notesData[key].add(val);
+    }
+    renderNotes(r, c);
 }
 
 // --- RENDERIZADO DEL TABLERO ---
 function renderBoard(board) {
     boardElement.innerHTML = ''; 
     inputsTablero = Array.from({ length: 9 }, () => Array(9).fill(null));
+    notesData = {};
 
     for (let r = 0; r < 9; r++) {
         for (let c = 0; c < 9; c++) {
+            notesData[`${r},${c}`] = new Set();
+
+            let wrapper = document.createElement('div');
+            wrapper.className = 'cell-wrapper';
+            if (c === 2 || c === 5) wrapper.classList.add('border-right');
+            if (r === 2 || r === 5) wrapper.classList.add('border-bottom');
+
             let input = document.createElement('input');
             input.type = 'text';
             input.maxLength = 1;
             input.className = 'cell';
             
-            // Bordes estéticos para los cuadrantes
-            if (c === 2 || c === 5) input.classList.add('border-right');
-            if (r === 2 || r === 5) input.classList.add('border-bottom');
+            let notesOverlay = document.createElement('div');
+            notesOverlay.className = 'notes-overlay';
+            notesOverlay.id = `notes-${r}-${c}`;
 
             if (board[r][c] !== 0) {
                 // Números iniciales fijos
                 input.value = board[r][c];
                 input.readOnly = true;
                 input.classList.add('readonly');
+                wrapper.classList.add('readonly');
             } else {
                 // Casillas jugables
+                input.addEventListener('keydown', (e) => {
+                    let val = parseInt(e.key);
+                    if (notesMode && !isNaN(val) && val >= 1 && val <= 9) {
+                        e.preventDefault(); 
+                        toggleNote(r, c, val);
+                    } else if (notesMode && (e.key === 'Backspace' || e.key === 'Delete')) {
+                        e.preventDefault();
+                        notesData[`${r},${c}`].clear();
+                        renderNotes(r, c);
+                    }
+                });
+
                 input.addEventListener('input', (e) => {
+                    if (notesMode) {
+                        e.target.value = '';
+                        return;
+                    }
+
                     let val = parseInt(e.target.value);
                     let fila = r;
                     let col = c;
 
                     if (!isNaN(val)) {
                         if (val === solucionActual[fila][col]) {
+                            // Limpiar notas visualmente si la celda se acierta
+                            document.getElementById(`notes-${r}-${c}`).innerHTML = '';
+                            
+                            // --- SISTEMA COMBO ---
+                            comboCount++;
+                            actualizarComboUI();
+
                             // --- NUEVA MECÁNICA DE COMBATE ---
-                            const danoAlRival = val;
+                            let multiplicadorDano = comboCount >= 3 ? 1.5 : 1;
+                            const danoAlRival = Math.ceil(val * multiplicadorDano);
                             const curacionPropia = Math.ceil(val / 2);
 
                             // 1. Aplicar curación propia
@@ -116,15 +191,19 @@ function renderBoard(board) {
                             e.target.classList.add('readonly');
                             
                         } else {
-                            // ERROR: Restar 10 de vida (lo que ya tenías)
+                            // ERROR: Pierde el combo y recibe daño
+                            comboCount = 0;
+                            actualizarComboUI();
+                            
                             saludPropia = Math.max(0, saludPropia - 10);
                             actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
                             socket.emit('actualizarSalud', saludPropia);
                             
+                            animarShake();
+
                             if (saludPropia <= 0) {
-                                alert("¡Te has quedado sin vida! Fin del juego.");
-                                socket.emit('abandonarPartida');
-                                volverAlLobby();
+                                socket.emit('actualizarSalud', 0); // Asegurar que el rival lo ve a 0
+                                mostrarModalGameOver("¡Has perdido!", "Te has quedado sin puntos de salud.");
                             }
                         }
                     }
@@ -134,7 +213,9 @@ function renderBoard(board) {
             }
             
             inputsTablero[r][c] = input; // Guardamos el input para actualizarlo después
-            boardElement.appendChild(input);
+            wrapper.appendChild(input);
+            wrapper.appendChild(notesOverlay);
+            boardElement.appendChild(wrapper);
         }
     }
 }
@@ -168,7 +249,96 @@ function volverAlLobby() {
     gameContainer.style.display = 'none';
     lobbyContainer.style.display = 'block';
     statusMsg.innerText = '';
-    findMatchBtn.style.display = 'inline-block';
+    document.getElementById('lobby-buttons').style.display = 'block';
+    document.getElementById('game-over-modal').style.display = 'none';
+    desactivarMuerteSubita(); // Resetea la muerte súbita visualmente
+}
+
+function actualizarComboUI() {
+    const comboEl = document.getElementById('player-combo');
+    if (comboCount >= 2) {
+        comboEl.style.display = 'block';
+        comboEl.innerText = `Combo x${comboCount}!`;
+        // Reiniciar animación
+        comboEl.classList.remove('active');
+        void comboEl.offsetWidth; 
+        comboEl.classList.add('active');
+    } else {
+        comboEl.style.display = 'none';
+    }
+}
+
+function animarShake() {
+    const wrapper = document.getElementById('boards-wrapper');
+    wrapper.classList.add('shake');
+    setTimeout(() => {
+        wrapper.classList.remove('shake');
+    }, 300);
+}
+
+function mostrarDanoFlotante(dano) {
+    const miniatura = document.getElementById('opponent-section');
+    const floating = document.createElement('div');
+    floating.className = 'floating-damage';
+    floating.innerText = `-${dano}`;
+    
+    // Posicionar aleatoriamente sobre el área del rival
+    floating.style.left = Math.floor(Math.random() * 80) + 20 + 'px';
+    floating.style.top = Math.floor(Math.random() * 50) + 20 + 'px';
+    
+    miniatura.appendChild(floating);
+
+    // Iniciar animación (subir y desvanecerse)
+    setTimeout(() => {
+        floating.style.transform = 'translateY(-30px)';
+        floating.style.opacity = '0';
+    }, 50);
+
+    // Eliminar del DOM después de 1 segundo
+    setTimeout(() => {
+        if(floating.parentElement) {
+            floating.remove();
+        }
+    }, 1000);
+}
+
+// Modal functions
+function mostrarModalGameOver(titulo, mensaje) {
+    document.getElementById('game-over-title').innerText = titulo;
+    document.getElementById('game-over-message').innerText = mensaje;
+    document.getElementById('game-over-modal').style.display = 'flex';
+}
+
+document.getElementById('rematch-btn').addEventListener('click', () => {
+    document.getElementById('game-over-title').innerText = "Esperando al rival...";
+    document.getElementById('game-over-message').innerText = "Has pedido revancha.";
+    document.getElementById('rematch-btn').style.display = 'none';
+    socket.emit('pedirRevancha');
+});
+
+document.getElementById('lobby-btn').addEventListener('click', () => {
+    socket.emit('abandonarPartida');
+    volverAlLobby();
+});
+
+// Funciones Muerte Súbita Visual
+let textMuerteSubita = null;
+function activarMuerteSubita() {
+    document.body.classList.add('sudden-death-bg');
+    if (!textMuerteSubita) {
+        textMuerteSubita = document.createElement('div');
+        textMuerteSubita.className = 'sudden-death-text';
+        textMuerteSubita.innerText = "¡MUERTE SÚBITA!";
+        gameContainer.insertBefore(textMuerteSubita, gameContainer.firstChild);
+    }
+}
+
+function desactivarMuerteSubita() {
+    document.body.classList.remove('sudden-death-bg');
+    if (textMuerteSubita) {
+        textMuerteSubita.remove();
+        textMuerteSubita = null;
+    }
 }
 
 function actualizarUIBarraVida(idBarra, idTexto, salud) {
@@ -196,11 +366,21 @@ function actualizarUIBarraVida(idBarra, idTexto, salud) {
 
 // --- LÓGICA DE SOCKET.IO Y MATCHMAKING ---
 
-// Botón buscar partida
+// Botón buscar partida 1v1
 findMatchBtn.addEventListener('click', () => {
-    findMatchBtn.style.display = 'none';
+    document.getElementById('lobby-buttons').style.display = 'none';
     statusMsg.innerText = "Buscando oponente...";
     socket.emit('buscarPartida', miNombre);
+});
+
+// Botones para jugar contra Bot
+document.querySelectorAll('.bot-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        let dif = e.target.getAttribute('data-dif');
+        document.getElementById('lobby-buttons').style.display = 'none';
+        statusMsg.innerText = "Instanciando IA (" + dif + ")...";
+        socket.emit('buscarPartidaBot', dif);
+    });
 });
 
 // Botón abandonar partida
@@ -222,16 +402,20 @@ socket.on('partidaEncontrada', (datos) => {
     p1Name.innerText = datos.jugador1; // Tu nombre siempre a la izquierda
     p2Name.innerText = datos.jugador2; // Nombre del rival a la derecha
     
-    // --- CORRECCIÓN AQUÍ ---
-    // Guardamos la solución enviada por el servidor para poder validar los ataques
+    // Configuración limpia
     solucionActual = datos.solucionPropia;
-
-    // Reiniciamos la salud a 150 para asegurar un inicio limpio
     saludPropia = 150;
     saludRival = 150;
+    comboCount = 0;
+    actualizarComboUI();
+    desactivarMuerteSubita();
+
     actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
     actualizarUIBarraVida('opponent-hp-bar', null, saludRival);
-    // -----------------------
+    
+    // Ocultar modal y reestablecer botones
+    document.getElementById('game-over-modal').style.display = 'none';
+    document.getElementById('rematch-btn').style.display = 'inline-block';
 
     // Dibujamos ambos tableros
     renderBoard(datos.tableroPropio);
@@ -265,24 +449,35 @@ socket.on('saludRivalActualizada', (nuevaSaludRival) => {
     actualizarUIBarraVida('opponent-hp-bar', null, saludRival);
     
     if (saludRival <= 0) {
-        alert("¡El rival se ha quedado sin vida! ¡Has ganado!");
-        volverAlLobby();
+        mostrarModalGameOver("¡Has ganado!", "El rival se ha quedado sin vida.");
     }
 });
 
-// Recibir daño porque el rival colocó un número correcto
+// Recibir daño porque el rival colocó un número correcto o daño externo
 socket.on('recibirAtaque', (datos) => {
     saludPropia = Math.max(0, saludPropia - datos.cantidad);
     actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
     
-    // Importante: Notificar al rival nuestra nueva salud para sincronizar su mini-barra
+    animarShake();
+    if(datos.flotante) { // Si viene del rival directamente
+       mostrarDanoFlotante(datos.cantidad);
+    }
+    
     socket.emit('actualizarSalud', saludPropia);
 
     if (saludPropia <= 0) {
-        alert("¡El rival te ha derrotado con sus aciertos! Fin del juego.");
-        socket.emit('abandonarPartida');
-        volverAlLobby();
+        mostrarModalGameOver("¡Has perdido!", "El rival te ha derrotado con sus aciertos.");
     }
+});
+
+// Eventos nuevos
+socket.on('muerteSubitaActivada', () => {
+    activarMuerteSubita();
+});
+
+socket.on('revanchaRechazada', () => {
+    alert("El oponente ha abandonado o cancelado la partida.");
+    volverAlLobby();
 });
 
 // Ejecutar revisión de cookie al cargar la página
