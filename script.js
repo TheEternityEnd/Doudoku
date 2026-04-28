@@ -124,6 +124,7 @@ if (undoBtn) {
             let input = inputsTablero[lastMove.r][lastMove.c];
             if (!input.classList.contains('readonly')) {
                 input.value = lastMove.oldVal;
+                input.classList.remove('incorrect');
                 updateHighlights();
                 socket.emit('movimiento', { fila: lastMove.r, columna: lastMove.c, valor: lastMove.oldVal });
             }
@@ -170,6 +171,7 @@ function handleInput(r, c, val) {
     moveHistory.push({ r, c, oldVal: input.value });
     
     input.value = val;
+    input.classList.remove('incorrect');
     updateHighlights();
     procesarJugada(r, c, val, input);
 }
@@ -242,6 +244,28 @@ function updateHighlights() {
     }
 }
 
+function actualizarNumpad() {
+    let counts = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, 8:0, 9:0};
+    for(let r=0; r<9; r++) {
+        for(let c=0; c<9; c++) {
+            let input = inputsTablero[r][c];
+            if(input.classList.contains('readonly') && input.value !== "") {
+                counts[input.value]++;
+            }
+        }
+    }
+    document.querySelectorAll('.numpad-btn').forEach(btn => {
+        let val = btn.getAttribute('data-val');
+        if (counts[val] >= 9) {
+            btn.innerHTML = "✓";
+            btn.classList.add('completed');
+        } else {
+            btn.innerHTML = val;
+            btn.classList.remove('completed');
+        }
+    });
+}
+
 // --- RENDERIZADO DEL TABLERO ---
 function renderBoard(board) {
     boardElement.innerHTML = ''; 
@@ -295,6 +319,7 @@ function renderBoard(board) {
             boardElement.appendChild(wrapper);
         }
     }
+    actualizarNumpad();
 }
 
 // --- LOGICA DE JUGADAS ---
@@ -332,11 +357,14 @@ function procesarJugada(r, c, valStr, input) {
             input.classList.add('readonly');
             wrappersTablero[r][c].classList.add('readonly');
             
+            actualizarNumpad();
+            
             // Re-evaluar highlights si cambian los números visualmente
             updateHighlights();
             
         } else {
             // Error
+            input.classList.add('incorrect');
             comboCount = 0;
             actualizarComboUI();
             
