@@ -22,8 +22,6 @@ let inputsTablero = [];
 let wrappersTablero = [];
 let saludPropia = 150;
 let saludRival = 150;
-let lastSaludRival = 150;
-let solucionActual = [];
 let comboCount = 0;
 
 let notesMode = false;
@@ -126,7 +124,7 @@ if (undoBtn) {
                 input.value = lastMove.oldVal;
                 input.classList.remove('incorrect');
                 updateHighlights();
-                socket.emit('movimiento', { fila: lastMove.r, columna: lastMove.c, valor: lastMove.oldVal });
+                socket.emit('enviarMovimiento', { fila: lastMove.r, columna: lastMove.c, valorIngresado: lastMove.oldVal });
             }
         }
     });
@@ -156,7 +154,7 @@ document.addEventListener('keydown', (e) => {
 
 function handleInput(r, c, val) {
     let input = inputsTablero[r][c];
-    if (input.classList.contains('readonly')) return; // Si ya está fija o acierto
+    if (input.classList.contains('readonly')) return; 
 
     if (notesMode && val !== '') {
         toggleNote(r, c, parseInt(val));
@@ -167,7 +165,6 @@ function handleInput(r, c, val) {
         return;
     }
 
-    // Guardar para deshacer
     moveHistory.push({ r, c, oldVal: input.value });
     
     input.value = val;
@@ -176,7 +173,6 @@ function handleInput(r, c, val) {
     procesarJugada(r, c, val, input);
 }
 
-// --- LOGICA DE NOTAS ---
 function renderNotes(r, c) {
     const overlay = document.getElementById(`notes-${r}-${c}`);
     if (!overlay) return;
@@ -204,9 +200,7 @@ function toggleNote(r, c, val) {
     renderNotes(r, c);
 }
 
-// --- HIGHLIGHTS ---
 function updateHighlights() {
-    // Limpiar clases
     for (let r = 0; r < 9; r++) {
         for (let c = 0; c < 9; c++) {
             if(wrappersTablero[r][c]) {
@@ -221,7 +215,6 @@ function updateHighlights() {
     let sc = selectedCell.c;
     let selectedVal = inputsTablero[sr][sc].value;
 
-    // Resaltar fila, columna y bloque
     let startRow = sr - (sr % 3);
     let startCol = sc - (sc % 3);
 
@@ -232,7 +225,6 @@ function updateHighlights() {
             if (r === sr || c === sc || (r >= startRow && r < startRow + 3 && c >= startCol && c < startCol + 3)) {
                 wrappersTablero[r][c].classList.add('highlight');
             }
-            // Resaltar números iguales
             if (selectedVal && selectedVal !== '' && inputsTablero[r][c].value === selectedVal) {
                 wrappersTablero[r][c].classList.add('highlight-same');
             }
@@ -266,7 +258,6 @@ function actualizarNumpad() {
     });
 }
 
-// --- RENDERIZADO DEL TABLERO ---
 function renderBoard(board) {
     boardElement.innerHTML = ''; 
     inputsTablero = Array.from({ length: 9 }, () => Array(9).fill(null));
@@ -286,7 +277,7 @@ function renderBoard(board) {
             input.type = 'text';
             input.maxLength = 1;
             input.className = 'cell';
-            input.readOnly = true; // Todo manejado por click y virtual numpad
+            input.readOnly = true;
             
             let notesOverlay = document.createElement('div');
             notesOverlay.className = 'notes-overlay';
@@ -300,7 +291,6 @@ function renderBoard(board) {
                 input.style.cursor = 'pointer';
             }
 
-            // Manejo de clicks para seleccionar celda
             wrapper.addEventListener('mousedown', (e) => {
                 e.preventDefault();
                 selectedCell = { r, c };
@@ -322,67 +312,8 @@ function renderBoard(board) {
     actualizarNumpad();
 }
 
-// --- LOGICA DE JUGADAS ---
 function procesarJugada(r, c, valStr, input) {
-    if (valStr === '') {
-        socket.emit('movimiento', { fila: r, columna: c, valor: '' });
-        return;
-    }
-
-    let val = parseInt(valStr);
-    if (!isNaN(val)) {
-        if (val === solucionActual[r][c]) {
-            // Acierto
-            document.getElementById(`notes-${r}-${c}`).innerHTML = '';
-            
-            comboCount++;
-            actualizarComboUI();
-
-            let multiplicadorDano = comboCount >= 3 ? 1.5 : 1;
-            const danoAlRival = Math.ceil(val * multiplicadorDano);
-            const curacionPropia = Math.ceil(val / 2);
-
-            saludPropia = Math.min(150, saludPropia + curacionPropia);
-            actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
-
-            mostrarFlotante(curacionPropia, 'curacion', true);
-            mostrarFlotante(danoAlRival, 'dano', false);
-
-            socket.emit('jugadorAcerto', { 
-                valorDano: danoAlRival, 
-                saludActualizada: saludPropia 
-            });
-
-            input.readOnly = true;
-            input.classList.add('readonly');
-            wrappersTablero[r][c].classList.add('readonly');
-            
-            actualizarNumpad();
-            
-            // Re-evaluar highlights si cambian los números visualmente
-            updateHighlights();
-            
-        } else {
-            // Error
-            input.classList.add('incorrect');
-            comboCount = 0;
-            actualizarComboUI();
-            
-            saludPropia = Math.max(0, saludPropia - 10);
-            actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
-            socket.emit('actualizarSalud', saludPropia);
-            
-            mostrarFlotante(10, 'dano', true);
-            
-            animarErrorCelda(r, c);
-
-            if (saludPropia <= 0) {
-                socket.emit('actualizarSalud', 0);
-                mostrarModalGameOver("¡Has perdido!", "Te has quedado sin puntos de salud.");
-            }
-        }
-    }
-    socket.emit('movimiento', { fila: r, columna: c, valor: valStr });
+    socket.emit('enviarMovimiento', { fila: r, columna: c, valorIngresado: valStr });
 }
 
 function animarErrorCelda(r, c) {
@@ -444,7 +375,6 @@ function mostrarFlotante(cantidad, tipo, isPlayer) {
     }, 1000);
 }
 
-// Modal functions
 function mostrarModalGameOver(titulo, mensaje) {
     document.getElementById('game-over-title').innerText = titulo;
     document.getElementById('game-over-message').innerText = mensaje;
@@ -463,7 +393,6 @@ document.getElementById('lobby-btn').addEventListener('click', () => {
     volverAlLobby();
 });
 
-// Funciones Muerte Súbita Visual
 let textMuerteSubita = null;
 function activarMuerteSubita() {
     document.body.classList.add('sudden-death-bg');
@@ -544,10 +473,8 @@ socket.on('partidaEncontrada', (datos) => {
     p1Name.innerText = datos.jugador1; 
     p2Name.innerText = datos.jugador2; 
     
-    solucionActual = datos.solucionPropia;
     saludPropia = 150;
     saludRival = 150;
-    lastSaludRival = 150;
     comboCount = 0;
     actualizarComboUI();
     desactivarMuerteSubita();
@@ -563,50 +490,58 @@ socket.on('partidaEncontrada', (datos) => {
 });
 
 socket.on('movimientoRival', (datos) => {
-    // No hacemos nada para no saturar
+    // Solo visual si es necesario, pero mejor no alterar nuestro grid
+});
+
+socket.on('movimientoCorrecto', (datos) => {
+    const input = inputsTablero[datos.fila][datos.columna];
+    document.getElementById(`notes-${datos.fila}-${datos.columna}`).innerHTML = '';
+    
+    input.classList.remove('incorrect');
+    input.classList.add('readonly');
+    wrappersTablero[datos.fila][datos.columna].classList.add('readonly');
+    
+    actualizarNumpad();
+    updateHighlights();
+    
+    mostrarFlotante(datos.curacion, 'curacion', true);
+    mostrarFlotante(datos.danoAlRival, 'dano', false);
+});
+
+socket.on('movimientoIncorrecto', (datos) => {
+    const input = inputsTablero[datos.fila][datos.columna];
+    input.classList.add('incorrect');
+    animarErrorCelda(datos.fila, datos.columna);
+    mostrarFlotante(10, 'dano', true);
+});
+
+socket.on('estadoActualizado', (estado) => {
+    if (estado.miSalud !== undefined) saludPropia = estado.miSalud;
+    if (estado.saludRival !== undefined) saludRival = estado.saludRival;
+    if (estado.combo !== undefined) comboCount = estado.combo;
+
+    actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
+    actualizarUIBarraVida('opponent-hp-bar', null, saludRival);
+    actualizarComboUI();
+
+    if (saludPropia <= 0) {
+        mostrarModalGameOver("¡Has perdido!", "Te has quedado sin puntos de salud.");
+    } else if (saludRival <= 0) {
+        mostrarModalGameOver("¡Has ganado!", "El rival se ha quedado sin vida.");
+    }
+});
+
+socket.on('recibirAtaqueServidor', (datos) => {
+    animarShakeGeneral();
+    if (!datos.silencio) {
+        mostrarFlotante(datos.cantidad, 'dano', true);
+        showToast("¡El rival ha acertado un número!");
+    }
 });
 
 socket.on('rivalDesconectado', () => {
     showToast("¡Tu oponente ha abandonado!");
     volverAlLobby();
-});
-
-socket.on('saludRivalActualizada', (nuevaSaludRival) => {
-    if (nuevaSaludRival > lastSaludRival) {
-        mostrarFlotante(nuevaSaludRival - lastSaludRival, 'curacion', false);
-    } else if (nuevaSaludRival < lastSaludRival) {
-        // El daño que nosotros le hacemos ya se muestra localmente. 
-        // Pero si fue un error de ellos, se muestran -10 de daño.
-        if (lastSaludRival - nuevaSaludRival === 10) {
-            mostrarFlotante(10, 'dano', false);
-        }
-    }
-    saludRival = nuevaSaludRival;
-    lastSaludRival = nuevaSaludRival;
-    
-    actualizarUIBarraVida('opponent-hp-bar', null, saludRival);
-    
-    if (saludRival <= 0) {
-        mostrarModalGameOver("¡Has ganado!", "El rival se ha quedado sin vida.");
-    }
-});
-
-socket.on('recibirAtaque', (datos) => {
-    saludPropia = Math.max(0, saludPropia - datos.cantidad);
-    actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
-    
-    animarShakeGeneral();
-    
-    if(datos.flotante) { 
-       mostrarFlotante(datos.cantidad, 'dano', true);
-       showToast("¡El rival ha acertado un número!");
-    }
-    
-    socket.emit('actualizarSalud', saludPropia);
-
-    if (saludPropia <= 0) {
-        mostrarModalGameOver("¡Has perdido!", "El rival te ha derrotado con sus aciertos.");
-    }
 });
 
 socket.on('muerteSubitaActivada', () => {

@@ -17,6 +17,24 @@ let jugadorEsperando = null;
 // Gestor de salas activas para la muerte súbita y revanchas
 const salasActivas = {};
 
+// SANEAMIENTO DE NOMBRES
+function sanitizeName(name) {
+    if (!name || typeof name !== 'string') return "Jugador";
+    name = name.replace(/<[^>]*>?/gm, ''); 
+    name = name.trim().substring(0, 15);
+    return name || "Jugador";
+}
+
+// RATE LIMIT CHECK
+function checkRateLimit(socket) {
+    const now = Date.now();
+    if (socket.lastMatchRequest && (now - socket.lastMatchRequest) < 3000) {
+        return false; // rate limited
+    }
+    socket.lastMatchRequest = now;
+    return true;
+}
+
 // --- LÓGICA DE SUDOKU (Ahora en el backend) ---
 function createEmptyBoard() {
     return Array.from({ length: 9 }, () => Array(9).fill(0));
@@ -58,9 +76,9 @@ function fillBoard(board) {
 
 function generarTableroCompleto() {
     let solucion = createEmptyBoard();
-    fillBoard(solucion); // Genera tablero resuelto
+    fillBoard(solucion); 
     
-    let puzzle = solucion.map(row => [...row]); // Copia la solución
+    let puzzle = solucion.map(row => [...row]); 
     let cellsToRemove = 45;
     while (cellsToRemove > 0) {
         let row = Math.floor(Math.random() * 9);
@@ -77,11 +95,11 @@ function generarTableroCompleto() {
 io.on('connection', (socket) => {
     console.log('Usuario conectado:', socket.id);
 
-    // MATCHMAKING: Un jugador busca partida
     socket.on('buscarPartida', (nombreUsuario) => {
-        socket.nombreJugador = nombreUsuario;
+        if (!checkRateLimit(socket)) return;
 
-        // Si ya hay alguien esperando, los emparejamos
+        socket.nombreJugador = sanitizeName(nombreUsuario);
+
         if (jugadorEsperando !== null && jugadorEsperando.id !== socket.id) {
             const idSala = `sala_${jugadorEsperando.id}_${socket.id}`;
             
@@ -91,35 +109,19 @@ io.on('connection', (socket) => {
             socket.salaActual = idSala;
             jugadorEsperando.salaActual = idSala;
 
-            // Generamos DOS tableros distintos
             const t1 = generarTableroCompleto();
             const t2 = generarTableroCompleto();
 
-            // NUEVO: Le enviamos a cada jugador SU propio tablero directamente
-            // Al jugador 1 le enviamos su tablero y el del rival
-            jugadorEsperando.emit('partidaEncontrada', {
-                jugador1: jugadorEsperando.nombreJugador,
-                jugador2: socket.nombreJugador,
-                tableroPropio: t1.puzzle,
-                solucionPropia: t1.solucion,
-                tableroRival: t2.puzzle
-            });
-
-            // Al jugador 2 le enviamos su tablero y el del rival invertidos
-            socket.emit('partidaEncontrada', {
-                jugador1: socket.nombreJugador,
-                jugador2: jugadorEsperando.nombreJugador,
-                tableroPropio: t2.puzzle,
-                solucionPropia: t2.solucion,
-                tableroRival: t1.puzzle
-            });
-
-            console.log(`Partida iniciada (Modo Carrera): ${jugadorEsperando.nombreJugador} VS ${socket.nombreJugador}`);
-            
-            // Registro para revanchas y muerte súbita
             salasActivas[idSala] = {
+                isBotRoom: false,
                 jugador1: jugadorEsperando.id,
                 jugador2: socket.id,
+                solucion1: t1.solucion,
+                solucion2: t2.solucion,
+                salud1: 150,
+                salud2: 150,
+                combo1: 0,
+                combo2: 0,
                 inicioTimestamp: Date.now(),
                 intervaloMuerte: null,
                 muerteSubita: false,
@@ -129,14 +131,26 @@ io.on('connection', (socket) => {
                 }
             };
 
-            iniciarChequeoMuerteSubita(idSala);
+            jugadorEsperando.emit('partidaEncontrada', {
+                jugador1: jugadorEsperando.nombreJugador,
+                jugador2: socket.nombreJugador,
+                tableroPropio: t1.puzzle,
+                tableroRival: t2.puzzle
+            });
 
-            // Limpiamos la cola de espera
+            socket.emit('partidaEncontrada', {
+                jugador1: socket.nombreJugador,
+                jugador2: jugadorEsperando.nombreJugador,
+                tableroPropio: t2.puzzle,
+                tableroRival: t1.puzzle
+            });
+
+            console.log(`Partida iniciada: ${jugadorEsperando.nombreJugador} VS ${socket.nombreJugador}`);
+            iniciarChequeoMuerteSubita(idSala);
             jugadorEsperando = null;
         } else {
-            // Si no hay nadie, este jugador se queda en espera
             jugadorEsperando = socket;
-            console.log(`${nombreUsuario} está esperando oponente...`);
+            console.log(`${socket.nombreJugador} está esperando oponente...`);
         }
     });
 
@@ -147,46 +161,108 @@ io.on('connection', (socket) => {
         }
     });
 
-    // SINCRONIZACIÓN DE JUEGO: Un jugador ingresó un número
-    socket.on('movimiento', (datos) => {
-        if (socket.salaActual) {
-            // Reenviamos el movimiento SOLO al oponente en la misma sala
-            socket.to(socket.salaActual).emit('movimientoRival', datos);
+    // EVALUACIÓN DE MOVIMIENTOS EN EL SERVIDOR
+    socket.on('enviarMovimiento', (datos) => {
+        const salaID = socket.salaActual;
+        if (!salaID || !salasActivas[salaID]) return;
+        
+        let sala = salasActivas[salaID];
+        let val = parseInt(datos.valorIngresado);
+        
+        if (!sala.isBotRoom) {
+            socket.to(salaID).emit('movimientoRival', { fila: datos.fila, columna: datos.columna, valor: datos.valorIngresado });
+        }
+
+        if (isNaN(val)) return; // Fue un borrado visual
+        
+        let esJugador1 = (sala.jugador1 === socket.id);
+        
+        if (sala.isBotRoom) {
+            let solucion = sala.solucionJugador;
+            if (val === solucion[datos.fila][datos.columna]) {
+                sala.comboJugador++;
+                let mult = sala.comboJugador >= 3 ? 1.5 : 1;
+                let dano = Math.ceil(val * mult);
+                let curacion = Math.ceil(val / 2);
+                
+                sala.saludJugador = Math.min(150, sala.saludJugador + curacion);
+                sala.bot.salud = Math.max(0, sala.bot.salud - dano);
+                
+                socket.emit('movimientoCorrecto', { fila: datos.fila, columna: datos.columna, curacion, danoAlRival: dano });
+                socket.emit('estadoActualizado', { miSalud: sala.saludJugador, saludRival: sala.bot.salud, combo: sala.comboJugador });
+            } else {
+                sala.comboJugador = 0;
+                sala.saludJugador = Math.max(0, sala.saludJugador - 10);
+                
+                socket.emit('movimientoIncorrecto', { fila: datos.fila, columna: datos.columna });
+                socket.emit('estadoActualizado', { miSalud: sala.saludJugador, saludRival: sala.bot.salud, combo: 0 });
+            }
+        } else {
+            let solucion = esJugador1 ? sala.solucion1 : sala.solucion2;
+            let miSaludKey = esJugador1 ? 'salud1' : 'salud2';
+            let saludRivalKey = esJugador1 ? 'salud2' : 'salud1';
+            let miComboKey = esJugador1 ? 'combo1' : 'combo2';
+
+            if (val === solucion[datos.fila][datos.columna]) {
+                sala[miComboKey]++;
+                let mult = sala[miComboKey] >= 3 ? 1.5 : 1;
+                let dano = Math.ceil(val * mult);
+                let curacion = Math.ceil(val / 2);
+
+                sala[miSaludKey] = Math.min(150, sala[miSaludKey] + curacion);
+                sala[saludRivalKey] = Math.max(0, sala[saludRivalKey] - dano);
+
+                socket.emit('movimientoCorrecto', { fila: datos.fila, columna: datos.columna, curacion, danoAlRival: dano });
+                
+                // Avisar al oponente que recibio ataque
+                let sockRival = io.sockets.sockets.get(esJugador1 ? sala.jugador2 : sala.jugador1);
+                if (sockRival) {
+                    sockRival.emit('recibirAtaqueServidor', { cantidad: dano });
+                }
+
+                io.sockets.sockets.get(sala.jugador1)?.emit('estadoActualizado', { miSalud: sala.salud1, saludRival: sala.salud2, combo: sala.combo1 });
+                io.sockets.sockets.get(sala.jugador2)?.emit('estadoActualizado', { miSalud: sala.salud2, saludRival: sala.salud1, combo: sala.combo2 });
+            } else {
+                sala[miComboKey] = 0;
+                sala[miSaludKey] = Math.max(0, sala[miSaludKey] - 10);
+
+                socket.emit('movimientoIncorrecto', { fila: datos.fila, columna: datos.columna });
+                io.sockets.sockets.get(sala.jugador1)?.emit('estadoActualizado', { miSalud: sala.salud1, saludRival: sala.salud2, combo: sala.combo1 });
+                io.sockets.sockets.get(sala.jugador2)?.emit('estadoActualizado', { miSalud: sala.salud2, saludRival: sala.salud1, combo: sala.combo2 });
+            }
         }
     });
 
     socket.on('buscarPartidaBot', (dificultad) => {
+        if (!checkRateLimit(socket)) return;
+        socket.nombreJugador = sanitizeName(socket.nombreJugador);
         iniciarPartidaBot(socket, dificultad);
     });
 
-    // SISTEMA REVANCHAS
     socket.on('pedirRevancha', () => {
         const salaID = socket.salaActual;
         if (socket.salaActual && salasActivas[socket.salaActual]) {
             let sala = salasActivas[socket.salaActual];
             if (sala.isBotRoom) {
-               // Bot automatically accepts
                limpiarSala(socket.salaActual); 
                iniciarPartidaBot(socket, sala.dificultadBot, socket.salaActual);
                return;
             }
 
             salasActivas[salaID].revancha[socket.id] = true;
-            
-            let rivalId = salasActivas[salaID].jugador1 === socket.id ? 
-                          salasActivas[salaID].jugador2 : salasActivas[salaID].jugador1;
+            let rivalId = salasActivas[salaID].jugador1 === socket.id ? salasActivas[salaID].jugador2 : salasActivas[salaID].jugador1;
 
             if (salasActivas[salaID].revancha[rivalId]) {
-                // Ambos quieren revancha
-                console.log(`Revancha aceptada en la sala ${salaID}`);
-                
-                // Limpiamos el estado viejo de la sala
                 limpiarSala(salaID);
                 
-                // Reiniciamos sala state
                 salasActivas[salaID] = {
+                    isBotRoom: false,
                     jugador1: socket.id,
                     jugador2: rivalId,
+                    salud1: 150,
+                    salud2: 150,
+                    combo1: 0,
+                    combo2: 0,
                     inicioTimestamp: Date.now(),
                     intervaloMuerte: null,
                     muerteSubita: false,
@@ -202,12 +278,14 @@ io.on('connection', (socket) => {
                 if (sock1 && sock2) {
                     const t1 = generarTableroCompleto();
                     const t2 = generarTableroCompleto();
+                    
+                    salasActivas[salaID].solucion1 = t1.solucion;
+                    salasActivas[salaID].solucion2 = t2.solucion;
 
                     sock1.emit('partidaEncontrada', {
                         jugador1: sock1.nombreJugador,
                         jugador2: sock2.nombreJugador,
                         tableroPropio: t1.puzzle,
-                        solucionPropia: t1.solucion,
                         tableroRival: t2.puzzle
                     });
 
@@ -215,7 +293,6 @@ io.on('connection', (socket) => {
                         jugador1: sock2.nombreJugador,
                         jugador2: sock1.nombreJugador,
                         tableroPropio: t2.puzzle,
-                        solucionPropia: t2.solucion,
                         tableroRival: t1.puzzle
                     });
 
@@ -225,7 +302,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // DESCONEXIÓN
     socket.on('disconnect', () => {
         if (jugadorEsperando && jugadorEsperando.id === socket.id) {
             jugadorEsperando = null;
@@ -236,7 +312,6 @@ io.on('connection', (socket) => {
             limpiarSala(socket.salaActual);
             socket.salaActual = null; 
         }
-        console.log('Usuario desconectado:', socket.id);
     });
 
     socket.on('abandonarPartida', () => {
@@ -248,62 +323,32 @@ io.on('connection', (socket) => {
             socket.salaActual = null;
         }
     });
-
-    socket.on('actualizarSalud', (puntos) => {
-        if (socket.salaActual) {
-            socket.to(socket.salaActual).emit('saludRivalActualizada', puntos);
-        }
-    });
-    
-    // El servidor recibe la notificación de un acierto
-    socket.on('jugadorAcerto', (datos) => {
-        if (socket.salaActual && salasActivas[socket.salaActual]) {
-            let sala = salasActivas[socket.salaActual];
-            if (sala.isBotRoom && sala.bot) {
-               sala.bot.salud = Math.max(0, sala.bot.salud - datos.valorDano);
-               socket.emit('saludRivalActualizada', sala.bot.salud);
-            } else {
-               // 1. Enviamos el daño al oponente
-               socket.to(socket.salaActual).emit('recibirAtaque', { 
-                   cantidad: datos.valorDano,
-                   flotante: true // Indicamos que es un ataque de jugador para mostrar daño
-               });
-               
-               // 2. Sincronizamos la curación del jugador en la mini-barra del oponente
-               socket.to(socket.salaActual).emit('saludRivalActualizada', datos.saludActualizada);
-            }
-        }
-    });
-
-    socket.on('actualizarSalud', (puntos) => {
-        if (socket.salaActual && salasActivas[socket.salaActual]) {
-            let sala = salasActivas[socket.salaActual];
-            if (!sala.isBotRoom) {
-                socket.to(socket.salaActual).emit('saludRivalActualizada', puntos);
-            }
-        }
-    });
 });
 
-// Función para gestionar la Muerte Súbita
 function iniciarChequeoMuerteSubita(salaID) {
-    // 180000 = 3 minutos
     setTimeout(() => {
         if (salasActivas[salaID]) {
             salasActivas[salaID].muerteSubita = true;
             io.to(salaID).emit('muerteSubitaActivada');
 
-            // Intervalo para restar 1 hp por segundo
             salasActivas[salaID].intervaloMuerte = setInterval(() => {
                 if(salasActivas[salaID]) {
-                   io.to(salaID).emit('recibirAtaque', { cantidad: 1, flotante: false });
-
-                   if (salasActivas[salaID].isBotRoom && salasActivas[salaID].bot) {
-                       salasActivas[salaID].bot.salud = Math.max(0, salasActivas[salaID].bot.salud - 1);
-                       let sock = io.sockets.sockets.get(salasActivas[salaID].jugador1);
+                   let sala = salasActivas[salaID];
+                   if (sala.isBotRoom) {
+                       sala.bot.salud = Math.max(0, sala.bot.salud - 1);
+                       sala.saludJugador = Math.max(0, sala.saludJugador - 1);
+                       let sock = io.sockets.sockets.get(sala.jugador1);
                        if (sock) {
-                           sock.emit('saludRivalActualizada', salasActivas[salaID].bot.salud);
+                           sock.emit('recibirAtaqueServidor', { cantidad: 1, silencio: true });
+                           sock.emit('estadoActualizado', { miSalud: sala.saludJugador, saludRival: sala.bot.salud, combo: sala.comboJugador });
                        }
+                   } else {
+                       sala.salud1 = Math.max(0, sala.salud1 - 1);
+                       sala.salud2 = Math.max(0, sala.salud2 - 1);
+                       
+                       io.to(salaID).emit('recibirAtaqueServidor', { cantidad: 1, silencio: true });
+                       io.sockets.sockets.get(sala.jugador1)?.emit('estadoActualizado', { miSalud: sala.salud1, saludRival: sala.salud2, combo: sala.combo1 });
+                       io.sockets.sockets.get(sala.jugador2)?.emit('estadoActualizado', { miSalud: sala.salud2, saludRival: sala.salud1, combo: sala.combo2 });
                    }
                 }
             }, 1000);
@@ -323,7 +368,6 @@ function limpiarSala(salaID) {
     }
 }
 
-// ------ LÓGICA DE JUEGO CONTRA IA ------
 function iniciarPartidaBot(socket, dificultad, idSalaExistente) {
     const idSala = idSalaExistente || `sala_bot_${socket.id}`;
     if (!idSalaExistente) {
@@ -340,6 +384,9 @@ function iniciarPartidaBot(socket, dificultad, idSalaExistente) {
         isBotRoom: true,
         dificultadBot: dificultad,
         jugador1: socket.id,
+        saludJugador: 150,
+        comboJugador: 0,
+        solucionJugador: tPlayer.solucion,
         bot: {
             nombre: `IA (${difLabel})`,
             puzzle: tBot.puzzle,
@@ -357,7 +404,6 @@ function iniciarPartidaBot(socket, dificultad, idSalaExistente) {
         jugador1: socket.nombreJugador,
         jugador2: salasActivas[idSala].bot.nombre,
         tableroPropio: tPlayer.puzzle,
-        solucionPropia: tPlayer.solucion,
         tableroRival: tBot.puzzle
     });
 
@@ -403,12 +449,13 @@ function iniciarBotLoop(salaID, dif) {
              let curacion = Math.ceil(val / 2);
              
              s.bot.salud = Math.min(150, s.bot.salud + curacion);
+             s.saludJugador = Math.max(0, s.saludJugador - dano);
              s.bot.puzzle[spot.r][spot.c] = val; 
              
              if (realPlayerSocket) {
                  realPlayerSocket.emit('movimientoRival', { fila: spot.r, columna: spot.c, valor: val });
-                 realPlayerSocket.emit('recibirAtaque', { cantidad: dano, flotante: true });
-                 realPlayerSocket.emit('saludRivalActualizada', s.bot.salud);
+                 realPlayerSocket.emit('recibirAtaqueServidor', { cantidad: dano });
+                 realPlayerSocket.emit('estadoActualizado', { miSalud: s.saludJugador, saludRival: s.bot.salud, combo: s.comboJugador });
              }
          } else {
              s.bot.combo = 0;
@@ -417,13 +464,12 @@ function iniciarBotLoop(salaID, dif) {
              if (realPlayerSocket) {
                  realPlayerSocket.emit('movimientoRival', { fila: spot.r, columna: spot.c, valor: val });
                  setTimeout(() => {
-                     // Solo limpiar si todavia está vacío en el estado interno
                      if (salasActivas[salaID] && salasActivas[salaID].bot && salasActivas[salaID].bot.puzzle[spot.r][spot.c] === 0) {
                         realPlayerSocket.emit('movimientoRival', { fila: spot.r, columna: spot.c, valor: '' });
                      }
                  }, 500);
                  
-                 realPlayerSocket.emit('saludRivalActualizada', s.bot.salud);
+                 realPlayerSocket.emit('estadoActualizado', { miSalud: s.saludJugador, saludRival: s.bot.salud, combo: s.comboJugador });
              }
          }
       }
@@ -438,7 +484,6 @@ function iniciarBotLoop(salaID, dif) {
    sala.bot.timer = setTimeout(botTurn, nextDelay);
 }
 
-// Iniciar el servidor
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Servidor corriendo en el puerto ${PORT}`);
