@@ -14,7 +14,7 @@
     --btn-hover: #7f8c8d;
     --primary-btn: #27ae60;
     --primary-btn-hover: #219150;
-    --modal-bg: rgba(0,0,0,0.6);
+    --modal-bg: rgba(0, 0, 0, 0.6);
     --modal-content-bg: #ffffff;
     --highlight-bg: rgba(52, 152, 219, 0.2);
     --highlight-same-bg: rgba(52, 152, 219, 0.4);
@@ -38,7 +38,7 @@ body.dark-mode {
     --btn-hover: #616161;
     --primary-btn: #00c853;
     --primary-btn-hover: #00e676;
-    --modal-bg: rgba(0,0,0,0.8);
+    --modal-bg: rgba(0, 0, 0, 0.8);
     --modal-content-bg: #1e1e1e;
     --highlight-bg: rgba(100, 181, 246, 0.15);
     --highlight-same-bg: rgba(100, 181, 246, 0.35);
@@ -84,6 +84,7 @@ h1 {
     font-weight: 600;
     transition: all 0.3s;
 }
+
 .icon-btn:hover {
     background: var(--cell-readonly-bg);
 }
@@ -93,11 +94,12 @@ h1 {
     background: var(--modal-content-bg);
     padding: 30px;
     border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
     text-align: center;
     margin-top: 5vh;
     border: 1px solid var(--line-color);
 }
+
 #username-input {
     padding: 12px;
     font-size: 16px;
@@ -108,6 +110,7 @@ h1 {
     outline: none;
     font-family: 'Inter', sans-serif;
 }
+
 button {
     font-family: 'Inter', sans-serif;
     padding: 12px 24px;
@@ -120,26 +123,32 @@ button {
     cursor: pointer;
     transition: transform 0.1s, background-color 0.3s;
 }
+
 button:active {
     transform: scale(0.98);
 }
+
 button:hover {
     background-color: var(--primary-btn-hover);
 }
+
 .bot-section {
     margin-top: 25px;
     padding-top: 15px;
     border-top: 1px solid var(--line-color);
 }
+
 .bot-btn-group {
     display: flex;
     gap: 10px;
     justify-content: center;
     margin-top: 10px;
 }
+
 .bot-btn {
     background-color: #8e44ad;
 }
+
 .bot-btn:hover {
     background-color: #9b59b6;
 }
@@ -163,19 +172,22 @@ button:hover {
     padding: 15px;
     border-radius: 12px;
     border: 1px solid var(--line-color);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
+
 .progress-wrapper {
     flex: 1;
     display: flex;
     flex-direction: column;
     position: relative;
 }
+
 .progress-label {
     font-weight: 600;
     font-size: 14px;
     margin-bottom: 5px;
 }
+
 .hp-container {
     width: 100%;
     height: 24px;
@@ -185,33 +197,50 @@ button:hover {
     overflow: hidden;
     border: 2px solid var(--line-color);
 }
+
 .hp-fill {
     width: 100%;
     height: 100%;
     background-color: var(--success-color);
     transition: width 0.3s ease, background-color 0.3s ease;
 }
+
 /* TEXTO FLOTANTE (DAÑO / CURACION) */
 .floating-text {
     position: absolute;
     font-weight: 900;
     font-size: 22px;
-    text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
     pointer-events: none;
     z-index: 1000;
     animation: floatUp 1s ease-out forwards;
 }
+
 .floating-dano {
     color: var(--error-color);
 }
+
 .floating-curacion {
     color: var(--success-color);
 }
+
 @keyframes floatUp {
-    0% { transform: translateY(0) scale(0.8); opacity: 1; }
-    10% { transform: translateY(-5px) scale(1.1); opacity: 1; }
-    100% { transform: translateY(-40px) scale(1); opacity: 0; }
+    0% {
+        transform: translateY(0) scale(0.8);
+        opacity: 1;
+    }
+
+    10% {
+        transform: translateY(-5px) scale(1.1);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateY(-40px) scale(1);
+        opacity: 0;
+    }
 }
+
 .hp-text {
     position: absolute;
     width: 100%;
@@ -221,8 +250,9 @@ button:hover {
     line-height: 24px;
     color: #000;
     top: 0;
-    text-shadow: 0px 0px 3px rgba(255,255,255,0.8);
+    text-shadow: 0px 0px 3px rgba(255, 255, 255, 0.8);
 }
+
 .combo-text {
     font-size: 16px;
     font-weight: 800;
@@ -243,6 +273,7 @@ button:hover {
     display: flex;
     justify-content: center;
 }
+
 #sudoku-board {
     display: grid;
     grid-template-columns: repeat(9, 1fr);
@@ -254,7 +285,7 @@ button:hover {
     max-width: 450px;
     aspect-ratio: 1 / 1;
     border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
     overflow: hidden;
 }
 
@@ -273,6 +304,7 @@ button:hover {
 .cell-wrapper:nth-child(3n):not(:nth-child(9n)) {
     border-right: 3px solid var(--block-border);
 }
+
 .cell-wrapper:nth-child(n+19):nth-child(-n+27),
 .cell-wrapper:nth-child(n+46):nth-child(-n+54) {
     border-bottom: 3px solid var(--block-border);
@@ -297,9 +329,11 @@ button:hover {
 .cell.readonly {
     color: var(--text-color);
 }
+
 .cell.incorrect {
     color: var(--error-color) !important;
 }
+
 .cell-wrapper.readonly {
     background-color: var(--cell-readonly-bg);
 }
@@ -308,9 +342,11 @@ button:hover {
 .cell-wrapper.highlight {
     background-color: var(--highlight-bg);
 }
+
 .cell-wrapper.highlight-same {
     background-color: var(--highlight-same-bg);
 }
+
 .cell-wrapper.selected {
     background-color: var(--highlight-same-bg);
 }
@@ -329,6 +365,7 @@ button:hover {
     justify-content: center;
     width: 100%;
 }
+
 .tool-btn {
     background-color: var(--btn-bg);
     color: #fff;
@@ -342,8 +379,14 @@ button:hover {
     justify-content: center;
     gap: 5px;
 }
-.tool-btn:hover { background-color: var(--btn-hover); }
-.tool-btn.active { background-color: var(--accent-color); }
+
+.tool-btn:hover {
+    background-color: var(--btn-hover);
+}
+
+.tool-btn.active {
+    background-color: var(--accent-color);
+}
 
 #numpad-container {
     display: flex;
@@ -352,6 +395,7 @@ button:hover {
     width: 100%;
     max-width: 100%;
 }
+
 .numpad-btn {
     background-color: var(--numpad-bg);
     color: var(--text-color);
@@ -361,9 +405,11 @@ button:hover {
     border-radius: 8px;
     flex: 1;
 }
+
 .numpad-btn:hover {
     background-color: var(--numpad-hover);
 }
+
 .numpad-btn.completed {
     color: var(--success-color);
     pointer-events: none;
@@ -374,18 +420,25 @@ button:hover {
     width: 100%;
     max-width: 300px;
 }
-#leave-match-btn:hover { background-color: #c0392b; }
+
+#leave-match-btn:hover {
+    background-color: #c0392b;
+}
 
 /* MODAL & TOASTS */
 .modal {
     position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     background: var(--modal-bg);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 2000;
 }
+
 .modal-content {
     background: var(--modal-content-bg);
     padding: 30px;
@@ -393,6 +446,7 @@ button:hover {
     text-align: center;
     border: 1px solid var(--line-color);
 }
+
 .modal-buttons {
     display: flex;
     gap: 10px;
@@ -402,7 +456,7 @@ button:hover {
 
 #toast-container {
     position: fixed;
-    bottom: 20px;
+    top: 20px;
     right: 20px;
     display: flex;
     flex-direction: column;
@@ -410,6 +464,16 @@ button:hover {
     z-index: 9999;
     pointer-events: none;
 }
+
+@media (max-width: 768px) {
+    #toast-container {
+        top: 10px;
+        right: 10px;
+        left: 10px;
+        align-items: center;
+    }
+}
+
 .toast {
     background: var(--accent-color);
     color: #fff;
@@ -417,31 +481,57 @@ button:hover {
     border-radius: 8px;
     font-weight: 600;
     font-size: 14px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     animation: slideIn 0.3s ease-out, fadeOut 0.3s ease-in 2.7s forwards;
 }
 
 @keyframes slideIn {
-    from { transform: translateX(100%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
+
 @keyframes fadeOut {
-    to { opacity: 0; transform: translateY(10px); }
+    to {
+        opacity: 0;
+        transform: translateY(10px);
+    }
 }
 
 /* SHAKE & FX */
 @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    20%, 60% { transform: translateX(-5px); }
-    40%, 80% { transform: translateX(5px); }
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    20%,
+    60% {
+        transform: translateX(-5px);
+    }
+
+    40%,
+    80% {
+        transform: translateX(5px);
+    }
 }
+
 .cell-error {
     animation: shake 0.4s;
     background-color: var(--error-color) !important;
 }
+
 .cell-error .cell {
     color: #fff !important;
 }
+
 .board-damage {
     animation: shake 0.4s;
     border-color: var(--error-color) !important;
@@ -449,24 +539,42 @@ button:hover {
 }
 
 @keyframes blinkCritical {
-    0%, 100% { background-color: var(--error-color); }
-    50% { background-color: #ff9d9d; }
+
+    0%,
+    100% {
+        background-color: var(--error-color);
+    }
+
+    50% {
+        background-color: #ff9d9d;
+    }
 }
-.hp-critical { 
-    animation: blinkCritical 0.6s infinite !important; 
+
+.hp-critical {
+    animation: blinkCritical 0.6s infinite !important;
 }
-.hp-mid { background-color: #f1c40f !important; }
-.hp-low { background-color: var(--error-color) !important; }
+
+.hp-mid {
+    background-color: #f1c40f !important;
+}
+
+.hp-low {
+    background-color: var(--error-color) !important;
+}
 
 /* NOTES */
 .notes-overlay {
     position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     pointer-events: none;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(3, 1fr);
 }
+
 .note-item {
     display: flex;
     align-items: center;
@@ -484,19 +592,23 @@ button:hover {
         align-items: flex-start;
         justify-content: center;
     }
+
     #controls-section {
         flex: 1;
         max-width: 300px;
     }
+
     #sudoku-board {
         max-width: 500px;
     }
+
     #numpad-container {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 10px;
         max-width: 300px;
     }
+
     .numpad-btn {
         padding: 15px 0;
         font-size: 24px;

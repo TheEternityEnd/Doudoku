@@ -18,14 +18,14 @@ const themeToggle = document.getElementById('theme-toggle');
 const cancelMatchBtn = document.getElementById('cancel-match-btn');
 
 let miNombre = "";
-let inputsTablero = []; 
+let inputsTablero = [];
 let wrappersTablero = [];
 let saludPropia = 150;
 let saludRival = 150;
 let comboCount = 0;
 
 let notesMode = false;
-let notesData = {}; 
+let notesData = {};
 let selectedCell = null; // {r, c}
 let moveHistory = []; // Historial para deshacer
 
@@ -63,7 +63,7 @@ function getCookie(nombre) {
     let nombreC = nombre + "=";
     let decodificado = decodeURIComponent(document.cookie);
     let ca = decodificado.split(';');
-    for(let i = 0; i < ca.length; i++) {
+    for (let i = 0; i < ca.length; i++) {
         let c = ca[i];
         while (c.charAt(0) == ' ') c = c.substring(1);
         if (c.indexOf(nombreC) == 0) return c.substring(nombreC.length, c.length);
@@ -82,7 +82,7 @@ function checkUser() {
 saveUserBtn.addEventListener('click', () => {
     let nombre = usernameInput.value.trim();
     if (nombre.length > 0) {
-        setCookie("sudoku_user", nombre, 30); 
+        setCookie("sudoku_user", nombre, 30);
         miNombre = nombre;
         mostrarLobbyPreparado();
     }
@@ -154,7 +154,7 @@ document.addEventListener('keydown', (e) => {
 
 function handleInput(r, c, val) {
     let input = inputsTablero[r][c];
-    if (input.classList.contains('readonly')) return; 
+    if (input.classList.contains('readonly')) return;
 
     if (notesMode && val !== '') {
         toggleNote(r, c, parseInt(val));
@@ -166,7 +166,7 @@ function handleInput(r, c, val) {
     }
 
     moveHistory.push({ r, c, oldVal: input.value });
-    
+
     input.value = val;
     input.classList.remove('incorrect');
     updateHighlights();
@@ -177,7 +177,7 @@ function renderNotes(r, c) {
     const overlay = document.getElementById(`notes-${r}-${c}`);
     if (!overlay) return;
     overlay.innerHTML = '';
-    
+
     for (let i = 1; i <= 9; i++) {
         let div = document.createElement('div');
         div.className = 'note-item';
@@ -191,7 +191,7 @@ function renderNotes(r, c) {
 function toggleNote(r, c, val) {
     const key = `${r},${c}`;
     if (!notesData[key]) notesData[key] = new Set();
-    
+
     if (notesData[key].has(val)) {
         notesData[key].delete(val);
     } else {
@@ -203,7 +203,7 @@ function toggleNote(r, c, val) {
 function updateHighlights() {
     for (let r = 0; r < 9; r++) {
         for (let c = 0; c < 9; c++) {
-            if(wrappersTablero[r][c]) {
+            if (wrappersTablero[r][c]) {
                 wrappersTablero[r][c].classList.remove('highlight', 'highlight-same', 'selected');
             }
         }
@@ -230,18 +230,18 @@ function updateHighlights() {
             }
         }
     }
-    
-    if(wrappersTablero[sr][sc]) {
+
+    if (wrappersTablero[sr][sc]) {
         wrappersTablero[sr][sc].classList.add('selected');
     }
 }
 
 function actualizarNumpad() {
-    let counts = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, 8:0, 9:0};
-    for(let r=0; r<9; r++) {
-        for(let c=0; c<9; c++) {
+    let counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
+    for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
             let input = inputsTablero[r][c];
-            if(input.classList.contains('readonly') && input.value !== "") {
+            if (input.classList.contains('readonly') && input.value !== "") {
                 counts[input.value]++;
             }
         }
@@ -259,7 +259,7 @@ function actualizarNumpad() {
 }
 
 function renderBoard(board) {
-    boardElement.innerHTML = ''; 
+    boardElement.innerHTML = '';
     inputsTablero = Array.from({ length: 9 }, () => Array(9).fill(null));
     wrappersTablero = Array.from({ length: 9 }, () => Array(9).fill(null));
     notesData = {};
@@ -272,13 +272,13 @@ function renderBoard(board) {
 
             let wrapper = document.createElement('div');
             wrapper.className = 'cell-wrapper';
-            
+
             let input = document.createElement('input');
             input.type = 'text';
             input.maxLength = 1;
             input.className = 'cell';
             input.readOnly = true;
-            
+
             let notesOverlay = document.createElement('div');
             notesOverlay.className = 'notes-overlay';
             notesOverlay.id = `notes-${r}-${c}`;
@@ -301,7 +301,7 @@ function renderBoard(board) {
                 selectedCell = { r, c };
                 updateHighlights();
             });
-            
+
             inputsTablero[r][c] = input;
             wrappersTablero[r][c] = wrapper;
             wrapper.appendChild(input);
@@ -338,7 +338,7 @@ function volverAlLobby() {
     statusMsg.innerText = '';
     document.getElementById('lobby-buttons').style.display = 'block';
     document.getElementById('game-over-modal').style.display = 'none';
-    desactivarMuerteSubita(); 
+    desactivarMuerteSubita();
 }
 
 function actualizarComboUI() {
@@ -347,7 +347,7 @@ function actualizarComboUI() {
         comboEl.style.display = 'block';
         comboEl.innerText = `Combo x${comboCount}!`;
         comboEl.classList.remove('active');
-        void comboEl.offsetWidth; 
+        void comboEl.offsetWidth;
         comboEl.classList.add('active');
     } else {
         comboEl.style.display = 'none';
@@ -358,18 +358,18 @@ function mostrarFlotante(cantidad, tipo, isPlayer) {
     const wrapperSelector = isPlayer ? '.player-progress' : '.opponent-progress';
     const wrapper = document.querySelector(wrapperSelector);
     if (!wrapper) return;
-    
+
     const floating = document.createElement('div');
     floating.className = `floating-text ${tipo === 'dano' ? 'floating-dano' : 'floating-curacion'}`;
     floating.innerText = tipo === 'dano' ? `-${cantidad}` : `+${cantidad}`;
-    
+
     floating.style.left = Math.floor(Math.random() * 40) + 30 + '%';
     floating.style.top = '0px';
-    
+
     wrapper.appendChild(floating);
 
     setTimeout(() => {
-        if(floating.parentElement) {
+        if (floating.parentElement) {
             floating.remove();
         }
     }, 1000);
@@ -414,10 +414,10 @@ function desactivarMuerteSubita() {
 
 function actualizarUIBarraVida(idBarra, idTexto, salud) {
     const barra = document.getElementById(idBarra);
-    
+
     const porcentaje = Math.max(0, (salud / 150) * 100);
     barra.style.width = porcentaje + "%";
-    
+
     if (idTexto) document.getElementById(idTexto).innerText = salud;
 
     barra.classList.remove('hp-mid', 'hp-low', 'hp-critical');
@@ -469,10 +469,10 @@ socket.on('partidaEncontrada', (datos) => {
     lobbyContainer.style.display = 'none';
     gameContainer.style.display = 'block';
     if (cancelMatchBtn) cancelMatchBtn.style.display = 'none';
-    
-    p1Name.innerText = datos.jugador1; 
-    p2Name.innerText = datos.jugador2; 
-    
+
+    p1Name.innerText = datos.jugador1;
+    p2Name.innerText = datos.jugador2;
+
     saludPropia = 150;
     saludRival = 150;
     comboCount = 0;
@@ -481,7 +481,7 @@ socket.on('partidaEncontrada', (datos) => {
 
     actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
     actualizarUIBarraVida('opponent-hp-bar', null, saludRival);
-    
+
     document.getElementById('game-over-modal').style.display = 'none';
     document.getElementById('rematch-btn').style.display = 'inline-block';
 
@@ -496,14 +496,14 @@ socket.on('movimientoRival', (datos) => {
 socket.on('movimientoCorrecto', (datos) => {
     const input = inputsTablero[datos.fila][datos.columna];
     document.getElementById(`notes-${datos.fila}-${datos.columna}`).innerHTML = '';
-    
+
     input.classList.remove('incorrect');
     input.classList.add('readonly');
     wrappersTablero[datos.fila][datos.columna].classList.add('readonly');
-    
+
     actualizarNumpad();
     updateHighlights();
-    
+
     mostrarFlotante(datos.curacion, 'curacion', true);
     mostrarFlotante(datos.danoAlRival, 'dano', false);
 });
@@ -535,7 +535,7 @@ socket.on('recibirAtaqueServidor', (datos) => {
     animarShakeGeneral();
     if (!datos.silencio) {
         mostrarFlotante(datos.cantidad, 'dano', true);
-        showToast("¡El rival ha acertado un número!");
+        showToast("¡El rival ha acertado un número!"); // Comentado para evitar tapar el tablero
     }
 });
 
