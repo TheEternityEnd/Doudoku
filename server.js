@@ -140,6 +140,13 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('cancelarBusqueda', () => {
+        if (jugadorEsperando && jugadorEsperando.id === socket.id) {
+            jugadorEsperando = null;
+            console.log(`${socket.nombreJugador || 'Un usuario'} ha cancelado la búsqueda.`);
+        }
+    });
+
     // SINCRONIZACIÓN DE JUEGO: Un jugador ingresó un número
     socket.on('movimiento', (datos) => {
         if (socket.salaActual) {

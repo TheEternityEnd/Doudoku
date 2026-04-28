@@ -14,19 +14,45 @@ const p1Name = document.getElementById('player1-name');
 const p2Name = document.getElementById('player2-name');
 const boardElement = document.getElementById('sudoku-board');
 const leaveMatchBtn = document.getElementById('leave-match-btn');
-const opponentBoardElement = document.getElementById('opponent-board');
-
+const themeToggle = document.getElementById('theme-toggle');
+const cancelMatchBtn = document.getElementById('cancel-match-btn');
 
 let miNombre = "";
-let inputsTablero = []; // Matriz para guardar referencias de los inputs HTML y actualizarlos más rápido
-let inputsOponente = [];
+let inputsTablero = []; 
+let wrappersTablero = [];
 let saludPropia = 150;
 let saludRival = 150;
+let lastSaludRival = 150;
 let solucionActual = [];
-let comboCount = 0; // Para el sistema de combos
+let comboCount = 0;
 
 let notesMode = false;
-let notesData = {}; // Guarda qué notas de lápiz hay en cada celda
+let notesData = {}; 
+let selectedCell = null; // {r, c}
+let moveHistory = []; // Historial para deshacer
+
+// --- THEME TOGGLE ---
+themeToggle.addEventListener('click', () => {
+    document.body.classList.toggle('dark-mode');
+    if (document.body.classList.contains('dark-mode')) {
+        themeToggle.innerText = "☀️ Claro";
+    } else {
+        themeToggle.innerText = "🌙 Oscuro";
+    }
+});
+
+// --- TOAST NOTIFICATIONS ---
+function showToast(message) {
+    const toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerText = message;
+    toastContainer.appendChild(toast);
+    setTimeout(() => {
+        if (toast.parentElement) toast.remove();
+    }, 3000);
+}
 
 // --- SISTEMA DE COOKIES ---
 function setCookie(nombre, valor, dias) {
@@ -58,7 +84,7 @@ function checkUser() {
 saveUserBtn.addEventListener('click', () => {
     let nombre = usernameInput.value.trim();
     if (nombre.length > 0) {
-        setCookie("sudoku_user", nombre, 30); // Guardamos por 30 días
+        setCookie("sudoku_user", nombre, 30); 
         miNombre = nombre;
         mostrarLobbyPreparado();
     }
@@ -71,16 +97,84 @@ function mostrarLobbyPreparado() {
     document.getElementById('lobby-buttons').style.display = 'block';
 }
 
-// Evento de Modo Notas
+// --- CONTROLES Y HERRAMIENTAS ---
 const toggleNotesBtn = document.getElementById('toggle-notes-btn');
 if (toggleNotesBtn) {
     toggleNotesBtn.addEventListener('click', () => {
         notesMode = !notesMode;
         toggleNotesBtn.classList.toggle('active', notesMode);
-        toggleNotesBtn.innerText = notesMode ? "✏️ Notas: ON" : "✏️ Notas: OFF";
+        toggleNotesBtn.innerText = notesMode ? "✏️ Notas (ON)" : "✏️ Notas";
     });
 }
 
+const eraseBtn = document.getElementById('erase-btn');
+if (eraseBtn) {
+    eraseBtn.addEventListener('click', () => {
+        if (selectedCell) {
+            handleInput(selectedCell.r, selectedCell.c, '');
+        }
+    });
+}
+
+const undoBtn = document.getElementById('undo-btn');
+if (undoBtn) {
+    undoBtn.addEventListener('click', () => {
+        if (moveHistory.length > 0) {
+            let lastMove = moveHistory.pop();
+            let input = inputsTablero[lastMove.r][lastMove.c];
+            if (!input.classList.contains('readonly')) {
+                input.value = lastMove.oldVal;
+                updateHighlights();
+                socket.emit('movimiento', { fila: lastMove.r, columna: lastMove.c, valor: lastMove.oldVal });
+            }
+        }
+    });
+}
+
+// Numpad Virtual
+document.querySelectorAll('.numpad-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        if (selectedCell) {
+            let val = e.target.getAttribute('data-val');
+            handleInput(selectedCell.r, selectedCell.c, val);
+        }
+    });
+});
+
+// Teclado Físico
+document.addEventListener('keydown', (e) => {
+    if (selectedCell && gameContainer.style.display !== 'none') {
+        let val = parseInt(e.key);
+        if (!isNaN(val) && val >= 1 && val <= 9) {
+            handleInput(selectedCell.r, selectedCell.c, val.toString());
+        } else if (e.key === 'Backspace' || e.key === 'Delete') {
+            handleInput(selectedCell.r, selectedCell.c, '');
+        }
+    }
+});
+
+function handleInput(r, c, val) {
+    let input = inputsTablero[r][c];
+    if (input.classList.contains('readonly')) return; // Si ya está fija o acierto
+
+    if (notesMode && val !== '') {
+        toggleNote(r, c, parseInt(val));
+        return;
+    } else if (notesMode && val === '') {
+        notesData[`${r},${c}`].clear();
+        renderNotes(r, c);
+        return;
+    }
+
+    // Guardar para deshacer
+    moveHistory.push({ r, c, oldVal: input.value });
+    
+    input.value = val;
+    updateHighlights();
+    procesarJugada(r, c, val, input);
+}
+
+// --- LOGICA DE NOTAS ---
 function renderNotes(r, c) {
     const overlay = document.getElementById(`notes-${r}-${c}`);
     if (!overlay) return;
@@ -108,11 +202,54 @@ function toggleNote(r, c, val) {
     renderNotes(r, c);
 }
 
+// --- HIGHLIGHTS ---
+function updateHighlights() {
+    // Limpiar clases
+    for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+            if(wrappersTablero[r][c]) {
+                wrappersTablero[r][c].classList.remove('highlight', 'highlight-same', 'selected');
+            }
+        }
+    }
+
+    if (!selectedCell) return;
+
+    let sr = selectedCell.r;
+    let sc = selectedCell.c;
+    let selectedVal = inputsTablero[sr][sc].value;
+
+    // Resaltar fila, columna y bloque
+    let startRow = sr - (sr % 3);
+    let startCol = sc - (sc % 3);
+
+    for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+            if (!wrappersTablero[r][c]) continue;
+
+            if (r === sr || c === sc || (r >= startRow && r < startRow + 3 && c >= startCol && c < startCol + 3)) {
+                wrappersTablero[r][c].classList.add('highlight');
+            }
+            // Resaltar números iguales
+            if (selectedVal && selectedVal !== '' && inputsTablero[r][c].value === selectedVal) {
+                wrappersTablero[r][c].classList.add('highlight-same');
+            }
+        }
+    }
+    
+    if(wrappersTablero[sr][sc]) {
+        wrappersTablero[sr][sc].classList.add('selected');
+    }
+}
+
 // --- RENDERIZADO DEL TABLERO ---
 function renderBoard(board) {
     boardElement.innerHTML = ''; 
     inputsTablero = Array.from({ length: 9 }, () => Array(9).fill(null));
+    wrappersTablero = Array.from({ length: 9 }, () => Array(9).fill(null));
     notesData = {};
+    selectedCell = null;
+    moveHistory = [];
 
     for (let r = 0; r < 9; r++) {
         for (let c = 0; c < 9; c++) {
@@ -120,99 +257,39 @@ function renderBoard(board) {
 
             let wrapper = document.createElement('div');
             wrapper.className = 'cell-wrapper';
-            if (c === 2 || c === 5) wrapper.classList.add('border-right');
-            if (r === 2 || r === 5) wrapper.classList.add('border-bottom');
-
+            
             let input = document.createElement('input');
             input.type = 'text';
             input.maxLength = 1;
             input.className = 'cell';
+            input.readOnly = true; // Todo manejado por click y virtual numpad
             
             let notesOverlay = document.createElement('div');
             notesOverlay.className = 'notes-overlay';
             notesOverlay.id = `notes-${r}-${c}`;
 
             if (board[r][c] !== 0) {
-                // Números iniciales fijos
                 input.value = board[r][c];
-                input.readOnly = true;
                 input.classList.add('readonly');
                 wrapper.classList.add('readonly');
             } else {
-                // Casillas jugables
-                input.addEventListener('keydown', (e) => {
-                    let val = parseInt(e.key);
-                    if (notesMode && !isNaN(val) && val >= 1 && val <= 9) {
-                        e.preventDefault(); 
-                        toggleNote(r, c, val);
-                    } else if (notesMode && (e.key === 'Backspace' || e.key === 'Delete')) {
-                        e.preventDefault();
-                        notesData[`${r},${c}`].clear();
-                        renderNotes(r, c);
-                    }
-                });
-
-                input.addEventListener('input', (e) => {
-                    if (notesMode) {
-                        e.target.value = '';
-                        return;
-                    }
-
-                    let val = parseInt(e.target.value);
-                    let fila = r;
-                    let col = c;
-
-                    if (!isNaN(val)) {
-                        if (val === solucionActual[fila][col]) {
-                            // Limpiar notas visualmente si la celda se acierta
-                            document.getElementById(`notes-${r}-${c}`).innerHTML = '';
-                            
-                            // --- SISTEMA COMBO ---
-                            comboCount++;
-                            actualizarComboUI();
-
-                            // --- NUEVA MECÁNICA DE COMBATE ---
-                            let multiplicadorDano = comboCount >= 3 ? 1.5 : 1;
-                            const danoAlRival = Math.ceil(val * multiplicadorDano);
-                            const curacionPropia = Math.ceil(val / 2);
-
-                            // 1. Aplicar curación propia
-                            saludPropia = Math.min(150, saludPropia + curacionPropia);
-                            actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
-
-                            // 2. Notificar al servidor: "He acertado, daña al rival y actualiza mi vida en su pantalla"
-                            socket.emit('jugadorAcerto', { 
-                                valorDano: danoAlRival, 
-                                saludActualizada: saludPropia 
-                            });
-
-                            // Bloquear la celda para que no se pueda volver a usar para atacar/curar
-                            e.target.readOnly = true;
-                            e.target.classList.add('readonly');
-                            
-                        } else {
-                            // ERROR: Pierde el combo y recibe daño
-                            comboCount = 0;
-                            actualizarComboUI();
-                            
-                            saludPropia = Math.max(0, saludPropia - 10);
-                            actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
-                            socket.emit('actualizarSalud', saludPropia);
-                            
-                            animarShake();
-
-                            if (saludPropia <= 0) {
-                                socket.emit('actualizarSalud', 0); // Asegurar que el rival lo ve a 0
-                                mostrarModalGameOver("¡Has perdido!", "Te has quedado sin puntos de salud.");
-                            }
-                        }
-                    }
-                    // Enviar movimiento visual al oponente
-                    socket.emit('movimiento', { fila, columna: col, valor: e.target.value });
-                });
+                input.style.cursor = 'pointer';
             }
+
+            // Manejo de clicks para seleccionar celda
+            wrapper.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                selectedCell = { r, c };
+                updateHighlights();
+            });
+            input.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                selectedCell = { r, c };
+                updateHighlights();
+            });
             
-            inputsTablero[r][c] = input; // Guardamos el input para actualizarlo después
+            inputsTablero[r][c] = input;
+            wrappersTablero[r][c] = wrapper;
             wrapper.appendChild(input);
             wrapper.appendChild(notesOverlay);
             boardElement.appendChild(wrapper);
@@ -220,29 +297,80 @@ function renderBoard(board) {
     }
 }
 
-function renderOpponentBoard(board) {
-    opponentBoardElement.innerHTML = ''; 
-    inputsOponente = Array.from({ length: 9 }, () => Array(9).fill(null));
+// --- LOGICA DE JUGADAS ---
+function procesarJugada(r, c, valStr, input) {
+    if (valStr === '') {
+        socket.emit('movimiento', { fila: r, columna: c, valor: '' });
+        return;
+    }
 
-    for (let r = 0; r < 9; r++) {
-        for (let c = 0; c < 9; c++) {
-            let input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'cell readonly'; 
+    let val = parseInt(valStr);
+    if (!isNaN(val)) {
+        if (val === solucionActual[r][c]) {
+            // Acierto
+            document.getElementById(`notes-${r}-${c}`).innerHTML = '';
+            
+            comboCount++;
+            actualizarComboUI();
+
+            let multiplicadorDano = comboCount >= 3 ? 1.5 : 1;
+            const danoAlRival = Math.ceil(val * multiplicadorDano);
+            const curacionPropia = Math.ceil(val / 2);
+
+            saludPropia = Math.min(150, saludPropia + curacionPropia);
+            actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
+
+            mostrarFlotante(curacionPropia, 'curacion', true);
+            mostrarFlotante(danoAlRival, 'dano', false);
+
+            socket.emit('jugadorAcerto', { 
+                valorDano: danoAlRival, 
+                saludActualizada: saludPropia 
+            });
+
             input.readOnly = true;
+            input.classList.add('readonly');
+            wrappersTablero[r][c].classList.add('readonly');
             
-            // Mantenemos los bordes gruesos en la miniatura
-            if (c === 2 || c === 5) input.classList.add('border-right');
-            if (r === 2 || r === 5) input.classList.add('border-bottom');
+            // Re-evaluar highlights si cambian los números visualmente
+            updateHighlights();
+            
+        } else {
+            // Error
+            comboCount = 0;
+            actualizarComboUI();
+            
+            saludPropia = Math.max(0, saludPropia - 10);
+            actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
+            socket.emit('actualizarSalud', saludPropia);
+            
+            mostrarFlotante(10, 'dano', true);
+            
+            animarErrorCelda(r, c);
 
-            if (board[r][c] !== 0) {
-                input.value = board[r][c];
+            if (saludPropia <= 0) {
+                socket.emit('actualizarSalud', 0);
+                mostrarModalGameOver("¡Has perdido!", "Te has quedado sin puntos de salud.");
             }
-            
-            inputsOponente[r][c] = input;
-            opponentBoardElement.appendChild(input);
         }
     }
+    socket.emit('movimiento', { fila: r, columna: c, valor: valStr });
+}
+
+function animarErrorCelda(r, c) {
+    const wrapper = wrappersTablero[r][c];
+    wrapper.classList.add('cell-error');
+    setTimeout(() => {
+        wrapper.classList.remove('cell-error');
+    }, 400);
+}
+
+function animarShakeGeneral() {
+    const board = document.getElementById('sudoku-board');
+    board.classList.add('board-damage');
+    setTimeout(() => {
+        board.classList.remove('board-damage');
+    }, 400);
 }
 
 function volverAlLobby() {
@@ -251,7 +379,7 @@ function volverAlLobby() {
     statusMsg.innerText = '';
     document.getElementById('lobby-buttons').style.display = 'block';
     document.getElementById('game-over-modal').style.display = 'none';
-    desactivarMuerteSubita(); // Resetea la muerte súbita visualmente
+    desactivarMuerteSubita(); 
 }
 
 function actualizarComboUI() {
@@ -259,7 +387,6 @@ function actualizarComboUI() {
     if (comboCount >= 2) {
         comboEl.style.display = 'block';
         comboEl.innerText = `Combo x${comboCount}!`;
-        // Reiniciar animación
         comboEl.classList.remove('active');
         void comboEl.offsetWidth; 
         comboEl.classList.add('active');
@@ -268,33 +395,20 @@ function actualizarComboUI() {
     }
 }
 
-function animarShake() {
-    const wrapper = document.getElementById('boards-wrapper');
-    wrapper.classList.add('shake');
-    setTimeout(() => {
-        wrapper.classList.remove('shake');
-    }, 300);
-}
-
-function mostrarDanoFlotante(dano) {
-    const miniatura = document.getElementById('opponent-section');
+function mostrarFlotante(cantidad, tipo, isPlayer) {
+    const wrapperSelector = isPlayer ? '.player-progress' : '.opponent-progress';
+    const wrapper = document.querySelector(wrapperSelector);
+    if (!wrapper) return;
+    
     const floating = document.createElement('div');
-    floating.className = 'floating-damage';
-    floating.innerText = `-${dano}`;
+    floating.className = `floating-text ${tipo === 'dano' ? 'floating-dano' : 'floating-curacion'}`;
+    floating.innerText = tipo === 'dano' ? `-${cantidad}` : `+${cantidad}`;
     
-    // Posicionar aleatoriamente sobre el área del rival
-    floating.style.left = Math.floor(Math.random() * 80) + 20 + 'px';
-    floating.style.top = Math.floor(Math.random() * 50) + 20 + 'px';
+    floating.style.left = Math.floor(Math.random() * 40) + 30 + '%';
+    floating.style.top = '0px';
     
-    miniatura.appendChild(floating);
+    wrapper.appendChild(floating);
 
-    // Iniciar animación (subir y desvanecerse)
-    setTimeout(() => {
-        floating.style.transform = 'translateY(-30px)';
-        floating.style.opacity = '0';
-    }, 50);
-
-    // Eliminar del DOM después de 1 segundo
     setTimeout(() => {
         if(floating.parentElement) {
             floating.remove();
@@ -344,36 +458,40 @@ function desactivarMuerteSubita() {
 function actualizarUIBarraVida(idBarra, idTexto, salud) {
     const barra = document.getElementById(idBarra);
     
-    // Calculamos el porcentaje para el ancho de la barra (evitando que sea menor a 0)
     const porcentaje = Math.max(0, (salud / 150) * 100);
     barra.style.width = porcentaje + "%";
     
     if (idTexto) document.getElementById(idTexto).innerText = salud;
 
-    // 1. Limpiamos cualquier color o animación anterior
     barra.classList.remove('hp-mid', 'hp-low', 'hp-critical');
 
-    // 2. Aplicamos la clase correcta según la cantidad de vida restante
     if (salud <= 25) {
-        barra.classList.add('hp-critical'); // Por debajo de 25: Parpadea en rojo y rosa
+        barra.classList.add('hp-critical');
     } else if (salud <= 50) {
-        barra.classList.add('hp-low');      // 50 o menos: Rojo sólido
+        barra.classList.add('hp-low');
     } else if (salud <= 100) {
-        barra.classList.add('hp-mid');      // 100 o menos: Amarillo sólido
+        barra.classList.add('hp-mid');
     }
-    // Si la salud es mayor a 100, se queda con su color verde por defecto
 }
 
 // --- LÓGICA DE SOCKET.IO Y MATCHMAKING ---
 
-// Botón buscar partida 1v1
 findMatchBtn.addEventListener('click', () => {
     document.getElementById('lobby-buttons').style.display = 'none';
     statusMsg.innerText = "Buscando oponente...";
+    if (cancelMatchBtn) cancelMatchBtn.style.display = 'inline-block';
     socket.emit('buscarPartida', miNombre);
 });
 
-// Botones para jugar contra Bot
+if (cancelMatchBtn) {
+    cancelMatchBtn.addEventListener('click', () => {
+        socket.emit('cancelarBusqueda');
+        statusMsg.innerText = '';
+        cancelMatchBtn.style.display = 'none';
+        document.getElementById('lobby-buttons').style.display = 'block';
+    });
+}
+
 document.querySelectorAll('.bot-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
         let dif = e.target.getAttribute('data-dif');
@@ -383,29 +501,25 @@ document.querySelectorAll('.bot-btn').forEach(btn => {
     });
 });
 
-// Botón abandonar partida
 leaveMatchBtn.addEventListener('click', () => {
     if (confirm('¿Estás seguro de que deseas abandonar la partida?')) {
-        // Le avisamos al servidor
         socket.emit('abandonarPartida');
-        // Regresamos a nuestra pantalla principal
         volverAlLobby();
     }
 });
 
-// El servidor encontró una partida
 socket.on('partidaEncontrada', (datos) => {
     lobbyContainer.style.display = 'none';
     gameContainer.style.display = 'block';
+    if (cancelMatchBtn) cancelMatchBtn.style.display = 'none';
     
-    // Asignamos los nombres
-    p1Name.innerText = datos.jugador1; // Tu nombre siempre a la izquierda
-    p2Name.innerText = datos.jugador2; // Nombre del rival a la derecha
+    p1Name.innerText = datos.jugador1; 
+    p2Name.innerText = datos.jugador2; 
     
-    // Configuración limpia
     solucionActual = datos.solucionPropia;
     saludPropia = 150;
     saludRival = 150;
+    lastSaludRival = 150;
     comboCount = 0;
     actualizarComboUI();
     desactivarMuerteSubita();
@@ -413,39 +527,35 @@ socket.on('partidaEncontrada', (datos) => {
     actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
     actualizarUIBarraVida('opponent-hp-bar', null, saludRival);
     
-    // Ocultar modal y reestablecer botones
     document.getElementById('game-over-modal').style.display = 'none';
     document.getElementById('rematch-btn').style.display = 'inline-block';
 
-    // Dibujamos ambos tableros
     renderBoard(datos.tableroPropio);
-    renderOpponentBoard(datos.tableroRival);
+    showToast("¡La partida ha comenzado!");
 });
 
-// Recibir movimiento del rival (Modo Carrera)
 socket.on('movimientoRival', (datos) => {
-    const inputOponente = inputsOponente[datos.fila][datos.columna];
-    
-    if (inputOponente) {
-        inputOponente.value = datos.valor;
-        
-        // Efecto visual rápido para notar que el rival escribió
-        inputOponente.style.backgroundColor = '#f1c40f'; // Amarillo brillante
-        setTimeout(() => {
-            inputOponente.style.backgroundColor = '#ecf0f1'; // Vuelve al gris tenue
-        }, 500);
-    }
+    // No hacemos nada para no saturar
 });
 
-// El rival abandonó la partida
 socket.on('rivalDesconectado', () => {
-    alert("¡Tu oponente ha abandonado la partida! Has ganado por abandono.");
+    showToast("¡Tu oponente ha abandonado!");
     volverAlLobby();
 });
 
-// Escuchar actualizaciones de salud del rival
 socket.on('saludRivalActualizada', (nuevaSaludRival) => {
+    if (nuevaSaludRival > lastSaludRival) {
+        mostrarFlotante(nuevaSaludRival - lastSaludRival, 'curacion', false);
+    } else if (nuevaSaludRival < lastSaludRival) {
+        // El daño que nosotros le hacemos ya se muestra localmente. 
+        // Pero si fue un error de ellos, se muestran -10 de daño.
+        if (lastSaludRival - nuevaSaludRival === 10) {
+            mostrarFlotante(10, 'dano', false);
+        }
+    }
     saludRival = nuevaSaludRival;
+    lastSaludRival = nuevaSaludRival;
+    
     actualizarUIBarraVida('opponent-hp-bar', null, saludRival);
     
     if (saludRival <= 0) {
@@ -453,14 +563,15 @@ socket.on('saludRivalActualizada', (nuevaSaludRival) => {
     }
 });
 
-// Recibir daño porque el rival colocó un número correcto o daño externo
 socket.on('recibirAtaque', (datos) => {
     saludPropia = Math.max(0, saludPropia - datos.cantidad);
     actualizarUIBarraVida('player-hp-bar', 'player-hp-val', saludPropia);
     
-    animarShake();
-    if(datos.flotante) { // Si viene del rival directamente
-       mostrarDanoFlotante(datos.cantidad);
+    animarShakeGeneral();
+    
+    if(datos.flotante) { 
+       mostrarFlotante(datos.cantidad, 'dano', true);
+       showToast("¡El rival ha acertado un número!");
     }
     
     socket.emit('actualizarSalud', saludPropia);
@@ -470,15 +581,15 @@ socket.on('recibirAtaque', (datos) => {
     }
 });
 
-// Eventos nuevos
 socket.on('muerteSubitaActivada', () => {
+    showToast("¡Modo Muerte Súbita activado!");
     activarMuerteSubita();
 });
 
 socket.on('revanchaRechazada', () => {
-    alert("El oponente ha abandonado o cancelado la partida.");
+    showToast("El oponente ha cancelado la partida.");
     volverAlLobby();
 });
 
-// Ejecutar revisión de cookie al cargar la página
+// Inicializar
 checkUser();

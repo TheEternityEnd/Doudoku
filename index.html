@@ -4,10 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Duodoku</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
-    <h1>Duodoku</h1>
+<body class="dark-mode">
+    <header class="main-header">
+        <h1>Duodoku</h1>
+        <button id="theme-toggle" class="icon-btn">☀️ Claro</button>
+    </header>
     
     <div id="lobby-container">
         <div id="username-section">
@@ -20,47 +24,69 @@
             <button id="find-match-btn">Buscar Partida 1v1</button>
             <div class="bot-section">
                 <h3>Juego Individual (IA)</h3>
-                <button class="bot-btn" data-dif="facil">Fácil</button>
-                <button class="bot-btn" data-dif="medio">Medio</button>
-                <button class="bot-btn" data-dif="dificil">Difícil</button>
+                <div class="bot-btn-group">
+                    <button class="bot-btn" data-dif="facil">Fácil</button>
+                    <button class="bot-btn" data-dif="medio">Medio</button>
+                    <button class="bot-btn" data-dif="dificil">Difícil</button>
+                </div>
             </div>
         </div>
 
         <p id="status-msg"></p>
+        <button id="cancel-match-btn" style="display: none; margin: 15px auto; background-color: var(--error-color);">Cancelar Búsqueda</button>
     </div>
 
     <div id="game-container" style="display: none;">
-        <div id="boards-wrapper">
-            <div class="spacer"></div>
-
-            <div id="main-player-section">
-                <div class="match-info">Tú: <span id="player1-name"></span></div>
-                
+        <!-- Progreso Doble -->
+        <div id="progress-container">
+            <div class="progress-wrapper player-progress">
+                <span class="progress-label">Tú: <span id="player1-name"></span></span>
                 <div class="hp-container">
                     <div id="player-hp-bar" class="hp-fill"></div>
                     <div class="hp-text"><span id="player-hp-val">150</span> / 150 HP</div>
                 </div>
-                <div id="player-combo" class="combo-text" style="display: none;">Combo x0!</div>
-
-                <div class="tools-container">
-                    <button id="toggle-notes-btn" class="tool-btn">✏️ Notas: OFF</button>
-                </div>
-
-                <div id="sudoku-board"></div>
-                <button id="leave-match-btn">Abandonar Partida</button>
             </div>
-
-            <div id="opponent-section">
-                <div class="match-info">Rival: <span id="player2-name"></span></div>
-                
-                <div class="hp-container mini">
+            
+            <div id="player-combo" class="combo-text" style="display: none;">Combo x0!</div>
+            
+            <div class="progress-wrapper opponent-progress">
+                <span class="progress-label">Rival: <span id="player2-name"></span></span>
+                <div class="hp-container">
                     <div id="opponent-hp-bar" class="hp-fill"></div>
                 </div>
+            </div>
+        </div>
 
-                <div id="opponent-board"></div>
+        <div id="main-layout">
+            <div id="board-section">
+                <div id="sudoku-board"></div>
+            </div>
+
+            <div id="controls-section">
+                <div class="tools-container">
+                    <button id="toggle-notes-btn" class="tool-btn">✏️ Notas</button>
+                    <button id="erase-btn" class="tool-btn">🧽 Borrar</button>
+                    <button id="undo-btn" class="tool-btn">↩️ Deshacer</button>
+                </div>
+
+                <div id="numpad-container">
+                    <button class="numpad-btn" data-val="1">1</button>
+                    <button class="numpad-btn" data-val="2">2</button>
+                    <button class="numpad-btn" data-val="3">3</button>
+                    <button class="numpad-btn" data-val="4">4</button>
+                    <button class="numpad-btn" data-val="5">5</button>
+                    <button class="numpad-btn" data-val="6">6</button>
+                    <button class="numpad-btn" data-val="7">7</button>
+                    <button class="numpad-btn" data-val="8">8</button>
+                    <button class="numpad-btn" data-val="9">9</button>
+                </div>
+
+                <button id="leave-match-btn">Abandonar Partida</button>
             </div>
         </div>
     </div>
+
+    <div id="toast-container"></div>
 
     <div id="game-over-modal" class="modal" style="display: none;">
         <div class="modal-content">
